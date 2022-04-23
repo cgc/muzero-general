@@ -139,13 +139,14 @@ class Game(AbstractGame):
     Game wrapper.
     """
 
-    def __init__(self, seed=None, *, test_mode=False):
-        if test_mode:
-            #self.env = gym.make("MiniGrid-ObsMazeSimple-01-2Obs-v0")
-            self.env = ObsMazeSimple_01_2Obs()
+    task_sets = ('train', 'test')
+
+    def __init__(self, seed=None, *, task_set='train'):
+        max_steps = 100
+        if task_set == 'test':
+            self.env = ObsMazeSimple_01_2Obs(max_steps=max_steps)
         else:
-            #self.env = gym.make("MiniGrid-ObsMazeSimple-01-1Obs-v0")
-            self.env = ObsMazeSimple_01_1Obs()
+            self.env = ObsMazeSimple_01_1Obs(max_steps=max_steps)
 
         self.env = gym_minigrid.wrappers.ImgObsWrapper(self.env)
         if seed is not None:

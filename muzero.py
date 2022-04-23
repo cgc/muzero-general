@@ -99,11 +99,11 @@ class MuZero:
         self.checkpoint = {
             "weights": None,
             "optimizer_state": None,
-            "total_reward": 0,
-            "muzero_reward": 0,
-            "opponent_reward": 0,
-            "episode_length": 0,
-            "mean_value": 0,
+            # "total_reward": 0,
+            # "muzero_reward": 0,
+            # "opponent_reward": 0,
+            # "episode_length": 0,
+            # "mean_value": 0,
             "training_step": 0,
             "lr": 0,
             "total_loss": 0,
@@ -115,6 +115,15 @@ class MuZero:
             "num_reanalysed_games": 0,
             "terminate": False,
         }
+        for task_set in self.Game.task_sets:
+            for key in [
+                "total_reward",
+                "muzero_reward",
+                "opponent_reward",
+                "episode_length",
+                "mean_value",
+            ]:
+                self.checkpoint[f'{key}_task_set_{task_set}'] = 0
         self.replay_buffer = {}
 
         cpu_actor = CPUActor.remote()
@@ -123,7 +132,7 @@ class MuZero:
 
         # Workers
         self.self_play_workers = None
-        self.test_worker = None
+        self.test_workers = None
         self.training_worker = None
         self.reanalyse_worker = None
         self.replay_buffer_worker = None
@@ -212,19 +221,23 @@ class MuZero:
         Keep track of the training performance.
         """
         # Launch the test worker to get performance metrics
-        self.test_worker = self_play.SelfPlay.options(
-            num_cpus=0,
-            num_gpus=num_gpus,
-        ).remote(
-            self.checkpoint,
-            self.Game,
-            self.config,
-            self.config.seed + self.config.num_workers,
-            test_mode=True,
-        )
-        self.test_worker.continuous_self_play.remote(
-            self.shared_storage_worker, None, True
-        )
+        self.test_workers = [
+            self_play.SelfPlay.options(
+                num_cpus=0,
+                num_gpus=num_gpus,
+            ).remote(
+                self.checkpoint,
+                self.Game,
+                self.config,
+                self.config.seed + self.config.num_workers,
+                task_set=task_set,
+            )
+            for task_set in self.Game.task_sets
+        ]
+        for w in self.test_workers:
+            w.continuous_self_play.remote(
+                self.shared_storage_worker, None, True
+            )
 
         # Write everything in TensorBoard
         writer = SummaryWriter(self.config.results_path)
@@ -249,11 +262,11 @@ class MuZero:
         # Loop for updating the training performance
         counter = 0
         keys = [
-            "total_reward",
-            "muzero_reward",
-            "opponent_reward",
-            "episode_length",
-            "mean_value",
+            # "total_reward",
+            # "muzero_reward",
+            # "opponent_reward",
+            # "episode_length",
+            # "mean_value",
             "training_step",
             "lr",
             "total_loss",
@@ -264,35 +277,51 @@ class MuZero:
             "num_played_steps",
             "num_reanalysed_games",
         ]
+        for task_set in self.Game.task_sets:
+            info_key = f"task_set_{task_set}"
+            for key in [
+                "total_reward",
+                "muzero_reward",
+                "opponent_reward",
+                "episode_length",
+                "mean_value",
+            ]:
+                keys.append(f'{key}_{info_key}')
         info = ray.get(self.shared_storage_worker.get_info.remote(keys))
         try:
             while info["training_step"] < self.config.training_steps:
                 info = ray.get(self.shared_storage_worker.get_info.remote(keys))
-                writer.add_scalar(
-                    "1.Total_reward/1.Total_reward",
-                    info["total_reward"],
-                    counter,
-                )
-                writer.add_scalar(
-                    "1.Total_reward/2.Mean_value",
-                    info["mean_value"],
-                    counter,
-                )
-                writer.add_scalar(
-                    "1.Total_reward/3.Episode_length",
-                    info["episode_length"],
-                    counter,
-                )
-                writer.add_scalar(
-                    "1.Total_reward/4.MuZero_reward",
-                    info["muzero_reward"],
-                    counter,
-                )
-                writer.add_scalar(
-                    "1.Total_reward/5.Opponent_reward",
-                    info["opponent_reward"],
-                    counter,
-                )
+
+                for task_set in self.Game.task_sets:
+                    key = f"1.Total_reward_task_set_{task_set}"
+                    info_key = f"task_set_{task_set}"
+                    writer.add_scalar(
+                        f"{key}/1.Total_reward",
+                        info[f"total_reward_{info_key}"],
+                        counter,
+                    )
+                    writer.add_scalar(
+                        f"{key}/2.Mean_value",
+                        info[f"mean_value_{info_key}"],
+                        counter,
+                    )
+                    writer.add_scalar(
+                        f"{key}/3.Episode_length",
+                        info[f"episode_length_{info_key}"],
+                        counter,
+                    )
+                    if 1 < len(self.config.players):
+                        writer.add_scalar(
+                            f"{key}/4.MuZero_reward",
+                            info[f"muzero_reward_{info_key}"],
+                            counter,
+                        )
+                        writer.add_scalar(
+                            f"{key}/5.Opponent_reward",
+                            info[f"opponent_reward_{info_key}"],
+                            counter,
+                        )
+
                 writer.add_scalar(
                     "2.Workers/1.Self_played_games",
                     info["num_played_games"],
@@ -321,8 +350,13 @@ class MuZero:
                 writer.add_scalar("3.Loss/Value_loss", info["value_loss"], counter)
                 writer.add_scalar("3.Loss/Reward_loss", info["reward_loss"], counter)
                 writer.add_scalar("3.Loss/Policy_loss", info["policy_loss"], counter)
+
+                reward_summary = ', '.join(
+                    f'{task_set}: {info[f"total_reward_task_set_{task_set}"]:.2f}'
+                    for task_set in self.Game.task_sets
+                )
                 print(
-                    f'Last test reward: {info["total_reward"]:.2f}. Training step: {info["training_step"]}/{self.config.training_steps}. Played games: {info["num_played_games"]}. Loss: {info["total_loss"]:.2f}',
+                    f'Last reward: {reward_summary}. Training step: {info["training_step"]}/{self.config.training_steps}. Played games: {info["num_played_games"]}. Loss: {info["total_loss"]:.2f}',
                     end="\r",
                 )
                 counter += 1
@@ -361,7 +395,7 @@ class MuZero:
         print("\nShutting down workers...")
 
         self.self_play_workers = None
-        self.test_worker = None
+        self.test_workers = None
         self.training_worker = None
         self.reanalyse_worker = None
         self.replay_buffer_worker = None

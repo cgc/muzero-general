@@ -14,10 +14,11 @@ class SelfPlay:
     Class which run in a dedicated thread to play games and save them to the replay-buffer.
     """
 
-    def __init__(self, initial_checkpoint, Game, config, seed, *, test_mode=False):
+    def __init__(self, initial_checkpoint, Game, config, seed, *, task_set='train'):
         self.config = config
-        self.game = Game(seed, test_mode=test_mode)
-        self.test_mode = test_mode
+        self.game = Game(seed, task_set=task_set)
+        assert task_set in Game.task_sets
+        self.task_set = task_set
 
         # Fix random generator seed
         numpy.random.seed(seed)
@@ -30,7 +31,8 @@ class SelfPlay:
         self.model.eval()
 
     def continuous_self_play(self, shared_storage, replay_buffer, test_mode=False):
-        assert self.test_mode == test_mode
+        if self.task_set == 'test': # HACK...
+            assert test_mode, 'should only be used to evaluate generalization, not for training'
         while ray.get(
             shared_storage.get_info.remote("training_step")
         ) < self.config.training_steps and not ray.get(
@@ -63,12 +65,14 @@ class SelfPlay:
                     self.config.muzero_player,
                 )
 
+                key = f"task_set_{self.task_set}"
+
                 # Save to the shared storage
                 shared_storage.set_info.remote(
                     {
-                        "episode_length": len(game_history.action_history) - 1,
-                        "total_reward": sum(game_history.reward_history),
-                        "mean_value": numpy.mean(
+                        f"episode_length_{key}": len(game_history.action_history) - 1,
+                        f"total_reward_{key}": sum(game_history.reward_history),
+                        f"mean_value_{key}": numpy.mean(
                             [value for value in game_history.root_values if value]
                         ),
                     }
@@ -76,13 +80,13 @@ class SelfPlay:
                 if 1 < len(self.config.players):
                     shared_storage.set_info.remote(
                         {
-                            "muzero_reward": sum(
+                            f"muzero_reward_{key}": sum(
                                 reward
                                 for i, reward in enumerate(game_history.reward_history)
                                 if game_history.to_play_history[i - 1]
                                 == self.config.muzero_player
                             ),
-                            "opponent_reward": sum(
+                            f"opponent_reward_{key}": sum(
                                 reward
                                 for i, reward in enumerate(game_history.reward_history)
                                 if game_history.to_play_history[i - 1]
