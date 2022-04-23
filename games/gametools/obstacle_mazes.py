@@ -31,7 +31,8 @@ class ObstacleMaze(MiniGridEnv):
         max_obstacles=float('inf'),
         random_agent_start=False,
         random_goal=False,
-        obstacle_type='lava'
+        obstacle_type='wall',
+        max_steps=None,
     ):
         self.tile_array = tile_array
         self.objs = parse_tile_array(tile_array)
@@ -44,7 +45,7 @@ class ObstacleMaze(MiniGridEnv):
         super().__init__(
             height=len(tile_array)+2,
             width=len(tile_array[0])+2,
-            max_steps=2*len(tile_array)*len(tile_array[0]),
+            max_steps=max_steps or 2*len(tile_array)*len(tile_array[0]),
             # Set this to True for maximum speed
             see_through_walls=True
         )
