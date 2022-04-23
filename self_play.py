@@ -14,9 +14,10 @@ class SelfPlay:
     Class which run in a dedicated thread to play games and save them to the replay-buffer.
     """
 
-    def __init__(self, initial_checkpoint, Game, config, seed):
+    def __init__(self, initial_checkpoint, Game, config, seed, *, test_mode=False):
         self.config = config
-        self.game = Game(seed)
+        self.game = Game(seed, test_mode=test_mode)
+        self.test_mode = test_mode
 
         # Fix random generator seed
         numpy.random.seed(seed)
@@ -29,6 +30,7 @@ class SelfPlay:
         self.model.eval()
 
     def continuous_self_play(self, shared_storage, replay_buffer, test_mode=False):
+        assert self.test_mode == test_mode
         while ray.get(
             shared_storage.get_info.remote("training_step")
         ) < self.config.training_steps and not ray.get(
