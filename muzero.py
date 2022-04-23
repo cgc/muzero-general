@@ -686,6 +686,10 @@ if __name__ == "__main__":
                 env.reset()
                 env.render()
 
+                print('Actions')
+                for action in env.legal_actions():
+                    print(f'\t{action}: {env.action_to_string(action)}')
+
                 done = False
                 while not done:
                     action = env.human_to_action()
