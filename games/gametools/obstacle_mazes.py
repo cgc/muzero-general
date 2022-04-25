@@ -33,6 +33,7 @@ class ObstacleMaze(MiniGridEnv):
         random_goal=False,
         obstacle_type='wall',
         max_steps=None,
+        **kwargs,
     ):
         self.tile_array = tile_array
         self.objs = parse_tile_array(tile_array)
@@ -47,7 +48,8 @@ class ObstacleMaze(MiniGridEnv):
             width=len(tile_array[0])+2,
             max_steps=max_steps or 2*len(tile_array)*len(tile_array[0]),
             # Set this to True for maximum speed
-            see_through_walls=True
+            see_through_walls=True,
+            **kwargs,
         )
 
     def _gen_grid(self, width, height):
