@@ -25,7 +25,7 @@ class MuZeroConfig:
 
 
         ### Game
-        self.observation_shape = (9, 9, 3)  # Dimensions of the game observation, must be 3D (channel, height, width). For a 1D array, please reshape it to (1, 1, length of array)
+        self.observation_shape = (7, 6, 3)  # Dimensions of the game observation, must be 3D (channel, height, width). For a 1D array, please reshape it to (1, 1, length of array)
         self.action_space = list(range(3))  # Fixed list of all possible actions. You should only edit the length
         self.players = list(range(1))  # List of players. You should only edit the length
         self.stacked_observations = 0  # Number of previous observations and previous actions to add to the current observation
@@ -71,7 +71,7 @@ class MuZeroConfig:
 
         # Fully Connected Network
         self.encoding_size = 32
-        self.fc_representation_layers = [32]  # Define the hidden layers in the representation network
+        self.fc_representation_layers = []  # Define the hidden layers in the representation network
         self.fc_dynamics_layers = [32]  # Define the hidden layers in the dynamics network
         self.fc_reward_layers = [32]  # Define the hidden layers in the reward network
         self.fc_value_layers = [32]  # Define the hidden layers in the value network
@@ -84,7 +84,7 @@ class MuZeroConfig:
             pathlib.Path(__file__).resolve().parents[1] /
             "results" /
             pathlib.Path(__file__).stem /
-            (datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S") + 'obs9')
+            (datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S") + '_' + '_'.join(['noRepLay']))
         )  # Path to store the model weights and TensorBoard logs
         self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
         self.training_steps = 100000  # Total number of training steps (ie weights update according to a batch)
@@ -149,14 +149,13 @@ class Game(AbstractGame):
     def __init__(self, seed=None, *, task_set='train'):
         kwargs = dict(
             max_steps=100,
-            agent_view_size=9,
         )
         if task_set == 'test':
             self.env = ObsMazeSimple_01_2Obs(**kwargs)
         else:
             self.env = ObsMazeSimple_01_1Obs(**kwargs)
 
-        self.env = gym_minigrid.wrappers.ImgObsWrapper(self.env)
+        self.env = gym_minigrid.wrappers.ImgObsWrapper(gym_minigrid.wrappers.FullyObsWrapper(self.env))
         if seed is not None:
             self.env.seed(seed)
 
